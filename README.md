@@ -1,0 +1,43 @@
+# eval-typeur
+Project Ocaml Dune pour simuler un evaluateur-typeur de Lambda calcul.
+
+## Prérequis
+
+- OCaml (recommandé: 4.12+)
+- Dune (>= 2.0)
+- opam (optionnel, pour gérer les dépendances)
+
+```bash
+# Créer un switch local (optionnel)
+opam switch create . --empty
+
+# Installer les dépendances du projet
+opam install . --deps-only
+```
+
+## Setup
+
+```bash
+# Compiler le projet
+dune build
+
+# Exécuter les tests
+dune runtest
+
+# Run main
+dune exec main
+```
+
+## Structure
+
+```bash
+eval-typeur
+├── bin
+│   └── main.ml
+├── lib
+│   ├── ast.ml # definition des types
+│   ├── parser.ml # lexer - parser
+│   └── printer.ml # pretty printer
+└── test
+    └── test_lambda.ml
+```

@@ -1,0 +1,4 @@
+(test
+ (name test_lambda)
+ (modules test_lambda)
+ (libraries lambda alcotest))
