@@ -23,7 +23,7 @@ let rec rename (t : pterm) (old_var : string) (new_var : string) : pterm =
       App (rename t1 old_var new_var, rename t2 old_var new_var)
   | Abs (x, t1) ->
       if x = old_var then
-        Abs (x, t1)  (* shadowing: ne pas descendre *)
+        Abs (x, t1)
       else
         Abs (x, rename t1 old_var new_var)
 
@@ -54,7 +54,7 @@ let rec substitute (t : pterm) (v : string) (s : pterm) : pterm =
       App (substitute t1 v s, substitute t2 v s)
   | Abs (x, t1) ->
       if x = v then
-        Abs (x, t1)  (* shadowing: ne pas descendre *)
+        Abs (x, t1)
       else
         Abs (x, substitute t1 v s)
 
@@ -62,7 +62,7 @@ let rec substitute (t : pterm) (v : string) (s : pterm) : pterm =
 let rec beta_reduce (t : pterm) : pterm =
     match t with
     | App (Abs (x, t1), t2) ->
-        substitute t1 x t2  (* beta-reduction *)
+        substitute t1 x t2
     | App (t1, t2) ->
         let t1' = beta_reduce t1 in
         if t1' != t1 then
@@ -76,7 +76,7 @@ let rec beta_reduce (t : pterm) : pterm =
         let t1' = beta_reduce t1 in
         let t2' = beta_reduce t2 in
         Add (t1', t2')
-    | _ -> t  (* Var ou N *)
+    | _ -> t
 
 
 let rec delta_reduce (t:pterm) : pterm =
