@@ -1,6 +1,7 @@
 open Lambda.Ast
 open Lambda.Parser
 open Lambda.Printer
+open Lambda.Evaluation
 open Alcotest
 
 
@@ -91,6 +92,34 @@ let test_type_printing_consistency () =
   let s = print_type t in
   check string "type consistency" "(X->(Y->Nat))" s
 
+(* === evaluation tests === *)
+let test_beta_identity_application () =
+  let t = parsePTERM "((\\x.x) 5)" in
+  let t' = beta_reduce t in
+  check string "beta: identity application" "5" (print_term t')
+
+let test_beta_const_function () =
+  let t = parsePTERM "((\\x.\\y.x) 7)" in
+  let t' = beta_reduce t in
+  check string "beta: const function" "(λy.7)" (print_term t')
+
+let test_delta_add_constants () =
+  let t = parsePTERM "1 + 2" in
+  let t' = delta_reduce t in
+  check string "delta: 1+2 -> 3" "3" (print_term t')
+
+let test_delta_nested_addition () =
+  let t = parsePTERM "(1 + 2) + 3" in
+  let t' = delta_reduce t in
+  check string "delta: (1+2)+3 -> 6" "6" (print_term t')
+
+let test_beta_then_delta_pipeline () =
+  let t = parsePTERM "((\\x.x) (1 + 2))" in
+  let after_beta = beta_reduce t in
+  check string "beta: strips application" "(1+2)" (print_term after_beta);
+  let after_delta = delta_reduce after_beta in
+  check string "delta: reduces to 3" "3" (print_term after_delta)
+
 (* === test list === *)
 let () =
   Alcotest.run "Lambda tests"
@@ -121,5 +150,13 @@ let () =
           test_case "addition" `Quick test_parse_addition;
           test_case "application" `Quick test_parse_application;
           test_case "complex expression" `Quick test_parse_complex_expression;
+        ] );
+      ( "evaluation",
+        [
+          test_case "beta: identity application" `Quick test_beta_identity_application;
+          test_case "beta: const function" `Quick test_beta_const_function;
+          test_case "delta: 1+2 -> 3" `Quick test_delta_add_constants;
+          test_case "delta: nested addition -> 6" `Quick test_delta_nested_addition;
+          test_case "beta then delta pipeline" `Quick test_beta_then_delta_pipeline;
         ] );
     ]

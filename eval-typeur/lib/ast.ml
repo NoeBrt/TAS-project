@@ -6,3 +6,8 @@ type pterm =  Var of string
 
 type ptype = Var of string
             | Arr of ptype * ptype | Nat
+
+
+type env = (string * ptype) list
+
+type equa = (ptype * ptype) list
