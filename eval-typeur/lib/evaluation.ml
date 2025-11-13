@@ -1,11 +1,5 @@
 open Ast
 
-
-let compteur_var : int ref = ref 0
-
-let nouvelle_var () : string = compteur_var := !compteur_var + 1;
-  "T"^(string_of_int !compteur_var)
-
 let compteur_level = ref 0
 
 let fresh base =
