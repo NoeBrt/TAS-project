@@ -36,51 +36,59 @@ let rec alpha_convert (t : pterm) : pterm =
       Abs (x_fresh, alpha_convert t1')
 
 
-
 let rec substitute (t : pterm) (v : string) (s : pterm) : pterm =
   match t with
   | Var x when x = v -> s
-  | Var x -> Var x
-  | N n -> N n
+  | Var _ -> t
+  | N _ -> t
   | Add (t1, t2) ->
       Add (substitute t1 v s, substitute t2 v s)
   | App (t1, t2) ->
       App (substitute t1 v s, substitute t2 v s)
   | Abs (x, t1) ->
       if x = v then
-        Abs (x, t1)
+        t
       else
         Abs (x, substitute t1 v s)
 
 
 let rec beta_reduce (t : pterm) : pterm =
-    match t with
-    | App (Abs (x, t1), t2) ->
-        substitute t1 x t2
-    | App (t1, t2) ->
-        let t1' = beta_reduce t1 in
-        if t1' != t1 then
-          App (t1', t2)
-        else
-          let t2' = beta_reduce t2 in
-          App (t1, t2')
-    | Abs (x, t1) ->
-        Abs (x, beta_reduce t1)
-    | Add (t1, t2) ->
-        let t1' = beta_reduce t1 in
-        let t2' = beta_reduce t2 in
-        Add (t1', t2')
-    | _ -> t
+  match t with
+  | App (Abs (x, t1), t2) -> substitute t1 x t2
+  | App (t1, t2) ->
+      let t1' = beta_reduce t1 in
+      if t1' <> t1 then App (t1', t2)
+      else App (t1, beta_reduce t2)
+
+  | Abs (x, t1) -> Abs (x, beta_reduce t1)
+  | Add (t1, t2) -> Add (beta_reduce t1, beta_reduce t2)
+  | _ -> t
 
 
-let rec delta_reduce (t:pterm) : pterm =
+let rec delta_reduce (t : pterm) : pterm =
   match t with
   | Add (N n1, N n2) -> N (n1 + n2)
-  | Add (t1, t2) -> delta_reduce( Add(delta_reduce t1, delta_reduce t2) )
-  | App (t1, t2) -> App (delta_reduce t1, delta_reduce t2)
+  | Add (t1, t2) -> Add (delta_reduce t1, delta_reduce t2)
+  | App (t1, t2) ->App (delta_reduce t1, delta_reduce t2)
   | Abs (x, t1) -> Abs (x, delta_reduce t1)
   | _ -> t
 
 
+open Printer
 
-
+let eval ?(timeout = 100) ?(trace = false) (t : pterm) : pterm =
+  let t = alpha_convert t in
+  if trace then print_endline ("[0] " ^ print_term t);
+  let rec loop t n i =
+    if n <= 0 then
+      failwith "Evaluation timeout"
+    else
+      let t' = delta_reduce (beta_reduce t) in
+      if t' = t then
+        t
+      else (
+        if trace then print_endline ("[" ^ string_of_int (i + 1) ^ "] " ^ print_term t');
+        loop t' (n - 1) (i + 1)
+      )
+  in
+  loop t timeout 0
