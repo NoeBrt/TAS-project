@@ -2,6 +2,7 @@ open Lambda.Ast
 open Lambda.Parser
 open Lambda.Printer
 open Lambda.Evaluation
+open Lambda.Typeur
 open Alcotest
 
 
@@ -108,9 +109,9 @@ let test_delta_add_constants () =
   let t' = delta_reduce t in
   check string "delta: 1+2 -> 3" "3" (print_term t')
 
-let test_delta_nested_addition () =
+let test_twodelta_nested_addition () =
   let t = parsePTERM "(1 + 2) + 3" in
-  let t' = delta_reduce t in
+  let t' = delta_reduce (delta_reduce t) in
   check string "delta: (1+2)+3 -> 6" "6" (print_term t')
 
 let test_beta_then_delta_pipeline () =
@@ -119,6 +120,82 @@ let test_beta_then_delta_pipeline () =
   check string "beta: strips application" "(1+2)" (print_term after_beta);
   let after_delta = delta_reduce after_beta in
   check string "delta: reduces to 3" "3" (print_term after_delta)
+
+let eval_exp () =
+  let t = parsePTERM "(\\x.(\\y.(y + x))) 4 5 " in
+  let after_eval = eval t in
+  check string "eval: (\\x.(\\y.(y + x))) 4 5 -> 9" "9" (print_term after_eval)
+
+
+
+(* eval timeout on divergent omega term *)
+let test_eval_timeout () =
+  let omega = parsePTERM "((\\x.(\\y.(y + x))) 4)  ((\\n.(\\f.(\\x.(f (n f x))))) 5)" in
+  check_raises "eval timeout" (Failure "Evaluation timeout") (fun () -> ignore (eval ~timeout:2 omega))
+
+  (* eval with trace should return same result as without trace *)
+let test_eval_trace_consistency () =
+  let t = parsePTERM "1 + 2 + 3" in
+  let r_no_trace = eval t in
+  let r_trace = eval ~trace:true t in
+  check string "trace consistency" (print_term r_no_trace) (print_term r_trace)
+
+(* === typeur tests (inference) === *)
+let contains_substring s sub =
+  let n = String.length s and m = String.length sub in
+  let rec aux i =
+    if i + m > n then false
+    else if String.sub s i m = sub then true
+    else aux (i + 1)
+  in
+  aux 0
+
+let test_typeur_ex_id () =
+  let t = Abs ("x", Var "x") in
+  let res = inference t in
+  check bool "ex_id contains term" true (contains_substring res "(λx.x)");
+  check bool "ex_id typable" true (contains_substring res "***TYPABLE***");
+  check bool "ex_id arrow" true (contains_substring res "->")
+
+let test_typeur_ex_k () =
+  let t = Abs ("x", Abs ("y", Var "x")) in
+  let res = inference t in
+  check bool "ex_k contains term" true (contains_substring res "(λx.(λy.x))");
+  check bool "ex_k typable" true (contains_substring res "***TYPABLE***");
+  check bool "ex_k arrow nested" true (contains_substring res "->(")
+
+let test_typeur_ex_s () =
+  let t = Abs ("x", Abs ("y", Abs ("z", App (App (Var "x", Var "z"), App (Var "y", Var "z"))))) in
+  let res = inference t in
+  check bool "ex_s contains term" true (contains_substring res "(λx.(λy.(λz.((x z) (y z)))))");
+  check bool "ex_s typable" true (contains_substring res "***TYPABLE***");
+  check bool "ex_s multi arrows" true (contains_substring res "->(")
+
+let test_typeur_ex_omega () =
+  let t = App (Abs ("x", App (Var "x", Var "x")), Abs ("y", App (Var "y", Var "y"))) in
+  let res = inference t in
+  check bool "ex_omega contains term" true (contains_substring res "((λx.(x x)) (λy.(y y)))");
+  check bool "ex_omega not typable" true (contains_substring res "***PAS TYPABLE***");
+  check bool "ex_omega occurs check" true (contains_substring res "occurence de T");
+  check bool "ex_omega occurs in" true (contains_substring res "dans (")
+
+let test_typeur_ex_nat1 () =
+  let t = App (Abs ("x", Add (Var "x", N 1)), N 3) in
+  let res = inference t in
+  check string "ex_nat1 exact"
+    "((λx.(x+1)) 3) ***TYPABLE*** avec le type Nat" res
+
+let test_typeur_ex_nat2 () =
+  let t = Abs ("x", Add (Var "x", Var "x")) in
+  let res = inference t in
+  check string "ex_nat2 exact"
+    "(λx.(x+x)) ***TYPABLE*** avec le type (Nat->Nat)" res
+
+let test_typeur_ex_nat3 () =
+  let t = App (Abs ("x", Add (Var "x", Var "x")), Abs ("x", Var "x")) in
+  let res = inference t in
+  check string "ex_nat3 exact"
+    "((λx.(x+x)) (λx.x)) ***PAS TYPABLE*** : type fleche non-unifiable avec Nat" res
 
 (* === test list === *)
 let () =
@@ -156,7 +233,20 @@ let () =
           test_case "beta: identity application" `Quick test_beta_identity_application;
           test_case "beta: const function" `Quick test_beta_const_function;
           test_case "delta: 1+2 -> 3" `Quick test_delta_add_constants;
-          test_case "delta: nested addition -> 6" `Quick test_delta_nested_addition;
+          test_case "delta: nested addition -> 6" `Quick test_twodelta_nested_addition;
           test_case "beta then delta pipeline" `Quick test_beta_then_delta_pipeline;
+          test_case "eval expression " `Quick eval_exp;
+          test_case "eval timeout: (\\x.(\\y.(y + x))) 4 5 -> 9" `Quick test_eval_timeout;
+          test_case "eval trace consistency" `Quick test_eval_trace_consistency;
+        ] );
+      ( "typeur",
+        [
+          test_case "ex_id" `Quick test_typeur_ex_id;
+          test_case "ex_k" `Quick test_typeur_ex_k;
+          test_case "ex_s" `Quick test_typeur_ex_s;
+          test_case "ex_omega" `Quick test_typeur_ex_omega;
+          test_case "ex_nat1" `Quick test_typeur_ex_nat1;
+          test_case "ex_nat2" `Quick test_typeur_ex_nat2;
+          test_case "ex_nat3" `Quick test_typeur_ex_nat3;
         ] );
     ]

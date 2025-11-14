@@ -1,5 +1,6 @@
 open Ast
 
+(* Eval termes *)
 let compteur_level = ref 0
 
 let fresh base =
@@ -91,4 +92,6 @@ let eval ?(timeout = 100) ?(trace = false) (t : pterm) : pterm =
         loop t' (n - 1) (i + 1)
       )
   in
-  loop t timeout 0
+  loop t timeout 0;;
+
+

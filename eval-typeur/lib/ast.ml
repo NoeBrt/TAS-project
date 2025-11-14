@@ -11,3 +11,5 @@ type ptype = Var of string
 type env = (string * ptype) list
 
 type equa = (ptype * ptype) list
+
+type equa_zip = equa * equa
