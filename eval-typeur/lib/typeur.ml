@@ -31,6 +31,7 @@ let rec substitue_type (t : ptype) (v : string) (t0 : ptype) : ptype =
   | Var v2 -> Var v2
   | Arr (t1, t2) -> Arr (substitue_type t1 v t0, substitue_type t2 v t0)
   | Nat -> Nat
+  | _ -> failwith "Not implemented for this type"
 
 (* remplace une variable par un type dans une liste d'équations*)
 let substitue_type_partout (e : equa) (v : string) (t0 : ptype) : equa =
@@ -51,6 +52,7 @@ let rec genere_equa (te : pterm) (ty : ptype) (e : env) : equa =
   | Add (t1, t2) -> let eq1 : equa = genere_equa t1 Nat e in
       let eq2 : equa = genere_equa t2 Nat e in
       (ty, Nat)::(eq1 @ eq2)
+  | _ -> failwith "Not implemented for this term type"
 
 exception Echec_unif of string
 
@@ -97,6 +99,7 @@ let rec unification (e : equa_zip) (but : string) : ptype =
   | (_, (t3, Arr (_,_))::_) -> raise (Echec_unif ("type fleche non-unifiable avec "^(print_type t3)))
     (* types nat des deux cotes : on passe *)
   | (e1, (Nat, Nat)::e2) -> unification (e1, e2) but
+  | _ -> raise (Echec_unif "types non-unifiables")
     (* les autres cas sont impossibles car t est Var, Arr ou Nat et déjà couverts *)
 
 (* enchaine generation d'equation et unification *)
