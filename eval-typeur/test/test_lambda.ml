@@ -13,10 +13,24 @@ let show_tokens toks =
       | LAMBDA -> "LAMBDA"
       | DOT -> "DOT"
       | PLUS -> "PLUS"
+      | MINUS -> "MINUS"
+      | CONS -> "CONS"
       | LP -> "LP"
       | RP -> "RP"
+      | EQUAL -> "EQUAL"
+      | LET -> "LET"
+      | IN -> "IN"
+      | IF -> "IF"
+      | ZERO -> "ZERO"
+      | EMPTY -> "EMPTY"
+      | THEN -> "THEN"
+      | ELSE -> "ELSE"
+      | HEAD -> "HEAD"
+      | TAIL -> "TAIL"
+      | FIX -> "FIX"
+      | NIL -> "NIL"
       | VAR x -> "VAR(" ^ x ^ ")"
-      | INT n -> "INT(" ^ string_of_int n ^ ")")
+        | INT n -> "INT(" ^ string_of_int n ^ ")")
   |> String.concat " "
 
 (* === print_term tests === *)
@@ -27,6 +41,30 @@ let test_print_simple_lambda_term () =
 let test_print_application_and_addition () =
   let t = Add (App (Var "f", N 2), N 3) in
   check string "application and addition" "((f 2)+3)" (print_term t)
+
+let test_print_subtraction () =
+  let t = Sub (N 5, N 3) in
+  check string "subtraction" "(5-3)" (print_term t)
+
+let test_print_cons_head_tail () =
+  let cons_term = Cons (N 1, Nil) in
+  let head_term = Head (Var "xs") in
+  let tail_term = Tail (Var "xs") in
+  check string "cons" "(1::nil)" (print_term cons_term);
+  check string "head" "head xs" (print_term head_term);
+  check string "tail" "tail xs" (print_term tail_term)
+
+let test_print_conditionals_and_fix () =
+  let if_zero_term = IfZero (N 0, N 1, N 2) in
+  let if_empty_term = IfEmpty (Nil, N 1, N 2) in
+  let fix_term = Fix (Abs ("f", Var "f")) in
+  check string "if zero" "if zero 0 then 1 else 2" (print_term if_zero_term);
+  check string "if empty" "if empty nil then 1 else 2" (print_term if_empty_term);
+  check string "fix" "fix (λf.f)" (print_term fix_term)
+
+let test_print_let_binding () =
+  let t = Let ("x", N 1, Add (Var "x", N 2)) in
+  check string "let binding" "let x=1 in (x+2)" (print_term t)
 
 (* === print_type tests === *)
 let test_print_simple_nat () =
@@ -48,7 +86,15 @@ let test_print_deeply_nested_type () =
   check string "deeply nested type"
     "((Nat->A)->(B->(Nat->C)))" (print_type t)
 
-(* === lexer tests === *)
+let test_print_list_type () =
+  let t = List (Arr (Nat, Nat)) in
+  check string "list type" "List (Nat->Nat)" (print_type t)
+
+let test_print_forall_type () =
+  let t = Forall ("X", Arr (Var "X", List (Var "X"))) in
+  check string "forall type" "Forall X.(X->List X)" (print_type t)
+
+(* === lexer tests : ensure every token is surfaced with the expected textual tag === *)
 let test_lex_simple_expression () =
   let toks = lex "\\x.x + 3" in
   let expected = "LAMBDA VAR(x) DOT VAR(x) PLUS INT(3)" in
@@ -59,7 +105,27 @@ let test_lex_parentheses_and_numbers () =
   let expected = "LP LP LAMBDA VAR(f) DOT VAR(f) RP INT(42) RP" in
   check string "lex parentheses and numbers" expected (show_tokens toks)
 
-(* === parser tests === *)
+let test_lex_subtraction () =
+  let toks = lex "5 - 3" in
+  let expected = "INT(5) MINUS INT(3)" in
+  check string "lex subtraction : \"INT(5) MINUS INT(3)\"" expected (show_tokens toks)
+
+let test_lex_let_binding () =
+  let toks = lex "let x = 1 in x" in
+  let expected = "LET VAR(x) EQUAL INT(1) IN VAR(x)" in
+  check string "lex let : \"LET VAR(x) EQUAL INT(1) IN VAR(x)\"" expected (show_tokens toks)
+
+let test_lex_list_and_conditional_ops () =
+  let toks = lex "if empty [] then head xs else tail xs" in
+  let expected = "IF EMPTY NIL THEN HEAD VAR(xs) ELSE TAIL VAR(xs)" in
+  check string "lex list/cond : \"IF EMPTY NIL THEN HEAD VAR(xs) ELSE TAIL VAR(xs)\"" expected (show_tokens toks)
+
+let test_lex_cons_expression () =
+  let toks = lex "1 :: []" in
+  let expected = "INT(1) CONS NIL" in
+  check string "lex cons : \"INT(1) CONS NIL\"" expected (show_tokens toks)
+
+(* === parser tests : parsed AST must reflect extended surface syntax === *)
 let test_parse_identity_function () =
   let t = parsePTERM "\\x.x" in
   check string "identity function"
@@ -86,6 +152,31 @@ let test_parse_complex_expression () =
   let t = parsePTERM "(\\f.\\x.(f x)) 5 + 3" in
   check string "complex expression"
     "(((λf.(λx.(f x))) 5)+3)" (print_term t)
+
+let test_parse_subtraction () =
+  let t = parsePTERM "5 - 3" in
+  check string "subtraction parse : \"Sub (N 5, N 3)\""
+    "Sub (N 5, N 3)" (string_of_pterm t)
+
+let test_parse_let_expression () =
+  let t = parsePTERM "let x = 1 in x + 2" in
+  check string "let parse : \"Let (\"x\", N 1, Add (Var \"x\", N 2))\""
+    "Let (\"x\", N 1, Add (Var \"x\", N 2))" (string_of_pterm t)
+
+let test_parse_fix_expression () =
+  let t = parsePTERM "fix \\f.f" in
+  check string "fix parse : \"Fix (Abs (\"f\", Var \"f\"))\""
+    "Fix (Abs (\"f\", Var \"f\"))" (string_of_pterm t)
+
+let test_parse_ifempty_expression () =
+  let t = parsePTERM "if empty [] then 1 else 2" in
+  check string "if empty parse : \"IfEmpty (Nil, N 1, N 2)\""
+    "IfEmpty (Nil, N 1, N 2)" (string_of_pterm t)
+
+let test_parse_cons_expression () =
+  let t = parsePTERM "1 :: []" in
+  check string "cons parse : \"Cons (N 1, Nil)\""
+    "Cons (N 1, Nil)" (string_of_pterm t)
 
 (* === consistency === *)
 let test_type_printing_consistency () =
@@ -203,30 +294,45 @@ let () =
     [
       ( "print_term",
         [
-          test_case "simple lambda" `Quick test_print_simple_lambda_term;
-          test_case "application and addition" `Quick test_print_application_and_addition;
+          test_case "simple lambda : \"(λx.x)\"" `Quick test_print_simple_lambda_term;
+          test_case "application and addition : \"((f 2)+3)\"" `Quick test_print_application_and_addition;
+          test_case "subtraction : \"(5-3)\"" `Quick test_print_subtraction;
+          test_case "cons/head/tail : \"(1::nil) | head xs | tail xs\"" `Quick test_print_cons_head_tail;
+          test_case "conditionals and fix : \"if zero 0 then 1 else 2 | if empty nil then 1 else 2 | fix (λf.f)\"" `Quick test_print_conditionals_and_fix;
+          test_case "let binding : \"let x=1 in (x+2)\"" `Quick test_print_let_binding;
         ] );
       ( "print_type",
         [
-          test_case "Nat" `Quick test_print_simple_nat;
-          test_case "variable type" `Quick test_print_variable_type;
-          test_case "arrow simple" `Quick test_print_arrow_type_simple;
-          test_case "arrow nested" `Quick test_print_nested_arrow_type;
-          test_case "deeply nested" `Quick test_print_deeply_nested_type;
+          test_case "Nat : \"Nat\"" `Quick test_print_simple_nat;
+          test_case "variable type : \"A\"" `Quick test_print_variable_type;
+          test_case "arrow simple : \"(X->Nat)\"" `Quick test_print_arrow_type_simple;
+          test_case "arrow nested : \"(X->(Nat->Y))\"" `Quick test_print_nested_arrow_type;
+          test_case "deeply nested : \"((Nat->A)->(B->(Nat->C)))\"" `Quick test_print_deeply_nested_type;
+          test_case "list : \"List (Nat->Nat)\"" `Quick test_print_list_type;
+          test_case "forall : \"Forall X.(X->List X)\"" `Quick test_print_forall_type;
           test_case "consistency" `Quick test_type_printing_consistency;
         ] );
       ( "lexer",
         [
-          test_case "simple expression" `Quick test_lex_simple_expression;
-          test_case "parentheses & numbers" `Quick test_lex_parentheses_and_numbers;
+          test_case "simple expression : \"LAMBDA VAR(x) DOT VAR(x) PLUS INT(3)\"" `Quick test_lex_simple_expression;
+          test_case "parentheses & numbers : \"LP LP LAMBDA VAR(f) DOT VAR(f) RP INT(42) RP\"" `Quick test_lex_parentheses_and_numbers;
+          test_case "subtraction : \"INT(5) MINUS INT(3)\"" `Quick test_lex_subtraction;
+          test_case "let binding : \"LET VAR(x) EQUAL INT(1) IN VAR(x)\"" `Quick test_lex_let_binding;
+          test_case "list & cond : \"IF EMPTY NIL THEN HEAD VAR(xs) ELSE TAIL VAR(xs)\"" `Quick test_lex_list_and_conditional_ops;
+          test_case "cons : \"INT(1) CONS NIL\"" `Quick test_lex_cons_expression;
         ] );
       ( "parser",
         [
-          test_case "identity" `Quick test_parse_identity_function;
-          test_case "nested lambda" `Quick test_parse_nested_lambda;
-          test_case "addition" `Quick test_parse_addition;
-          test_case "application" `Quick test_parse_application;
-          test_case "complex expression" `Quick test_parse_complex_expression;
+          test_case "identity : \"Abs (\"x\", Var \"x\")\"" `Quick test_parse_identity_function;
+          test_case "nested lambda : \"Abs (\"x\", Abs (\"y\", App (Var \"x\", Var \"y\")))\"" `Quick test_parse_nested_lambda;
+          test_case "addition : \"Add (Add (N 1, N 2), N 3)\"" `Quick test_parse_addition;
+          test_case "subtraction : \"Sub (N 5, N 3)\"" `Quick test_parse_subtraction;
+          test_case "application : \"App (Abs (\"f\", Var \"f\"), Abs (\"x\", Var \"x\"))\"" `Quick test_parse_application;
+          test_case "complex expression : \"(((λf.(λx.(f x))) 5)+3)\"" `Quick test_parse_complex_expression;
+          test_case "let : \"Let (\"x\", N 1, Add (Var \"x\", N 2))\"" `Quick test_parse_let_expression;
+          test_case "fix : \"Fix (Abs (\"f\", Var \"f\"))\"" `Quick test_parse_fix_expression;
+          test_case "if empty : \"IfEmpty (Nil, N 1, N 2)\"" `Quick test_parse_ifempty_expression;
+          test_case "cons : \"Cons (N 1, Nil)\"" `Quick test_parse_cons_expression;
         ] );
       ( "evaluation",
         [
