@@ -1,12 +1,51 @@
 open Ast
 
-type tok = LAMBDA | DOT | PLUS | LP | RP | VAR of string | INT of int
+type tok =
+  | LAMBDA
+  | DOT
+  | PLUS
+  | MINUS
+  | CONS
+  | LP
+  | RP
+  | EQUAL
+  | LET
+  | IN
+  | IF
+  | ZERO
+  | EMPTY
+  | THEN
+  | ELSE
+  | HEAD
+  | TAIL
+  | FIX
+  | NIL
+  | VAR of string
+  | INT of int
 
 let lex s =
   let buf, toks = Buffer.create 10, ref [] in
   let push t = toks := t :: !toks in
+  let keyword_or_var str =
+    match str with
+    | "let" -> LET
+    | "in" -> IN
+    | "if" -> IF
+    | "then" -> THEN
+    | "else" -> ELSE
+    | "zero" -> ZERO
+    | "empty" -> EMPTY
+    | "head" -> HEAD
+    | "tail" -> TAIL
+    | "fix" -> FIX
+    | _ -> VAR str
+  in
   let flush () =
-    if Buffer.length buf > 0 then (push (VAR (Buffer.contents buf)); Buffer.clear buf)
+    if Buffer.length buf > 0 then (
+      let str = Buffer.contents buf in
+      push (keyword_or_var str);
+      Buffer.clear buf
+    )
   in
   let is_digit c = '0' <= c && c <= '9' in
   let rec loop i =
@@ -17,7 +56,13 @@ let lex s =
     | ')' -> flush (); push RP; loop (i+1)
     | '.' -> flush (); push DOT; loop (i+1)
     | '+' -> flush (); push PLUS; loop (i+1)
+    | '-' -> flush (); push MINUS; loop (i+1)
+    | '=' -> flush (); push EQUAL; loop (i+1)
     | '\\' -> flush (); push LAMBDA; loop (i + 1)
+    | ':' when i + 1 < String.length s && s.[i + 1] = ':' ->
+        flush (); push CONS; loop (i + 2)
+    | '[' when i + 1 < String.length s && s.[i + 1] = ']' ->
+        flush (); push NIL; loop (i + 2)
     | c when is_digit c ->
         let j = ref i in
         while !j < String.length s && is_digit s.[!j] do incr j done;
@@ -31,10 +76,47 @@ exception Parse_err of string
 
 let rec term toks =
   match toks with
+  | LET :: VAR x :: EQUAL :: rest ->
+      let t1, rest1 = term rest in
+      (match rest1 with
+       | IN :: rest2 ->
+           let t2, rest3 = term rest2 in
+           (Let (x, t1, t2), rest3)
+       | _ -> raise (Parse_err "expected 'in' after let binding"))
+  | IF :: ZERO :: rest ->
+      let cond, rest1 = term rest in
+      (match rest1 with
+       | THEN :: rest2 ->
+           let t_then, rest3 = term rest2 in
+           (match rest3 with
+            | ELSE :: rest4 ->
+                let t_else, rest5 = term rest4 in
+                (IfZero (cond, t_then, t_else), rest5)
+            | _ -> raise (Parse_err "expected 'else'"))
+       | _ -> raise (Parse_err "expected 'then'"))
+    | IF :: EMPTY :: rest ->
+      let cond, rest1 = term rest in
+      (match rest1 with
+       | THEN :: rest2 ->
+           let t_then, rest3 = term rest2 in
+           (match rest3 with
+            | ELSE :: rest4 ->
+                let t_else, rest5 = term rest4 in
+                (IfEmpty (cond, t_then, t_else), rest5)
+            | _ -> raise (Parse_err "expected 'else'"))
+       | _ -> raise (Parse_err "expected 'then'"))
   | LAMBDA :: VAR x :: DOT :: rest ->
       let t, rest' = term rest in
       (Abs (x, t), rest')
-  | _ -> sum toks
+  | _ -> cons toks
+
+and cons toks =
+  let t1, rest1 = sum toks in
+  match rest1 with
+  | CONS :: rest ->
+      let t2, rest' = cons rest in
+      (Cons (t1, t2), rest')
+  | _ -> t1, rest1
 
 and sum toks =
   let t1, rest1 = app toks in
@@ -43,6 +125,9 @@ and sum toks =
     | PLUS :: rest ->
         let t2, rest' = app rest in
         aux (Add (acc, t2)) rest'
+    | MINUS :: rest ->
+        let t2, rest' = app rest in
+        aux (Sub (acc, t2)) rest'
     | _ -> acc, toks
   in
   aux t1 rest1
@@ -51,7 +136,7 @@ and app toks =
   let t1, rest1 = atom toks in
   let rec aux acc toks =
     match toks with
-    | (VAR _ | INT _ | LP) :: _ as rest ->
+    | (VAR _ | INT _ | LP | NIL | HEAD | TAIL | FIX) :: _ as rest ->
         let t2, rest' = atom rest in
         aux (App (acc, t2)) rest'
     | _ -> acc, toks
@@ -61,6 +146,16 @@ and app toks =
 and atom = function
   | VAR x :: rest -> Var x, rest
   | INT n :: rest -> N n, rest
+  | NIL :: rest -> Nil, rest
+  | HEAD :: rest ->
+      let t, rest' = atom rest in
+      (Head t, rest')
+  | TAIL :: rest ->
+      let t, rest' = atom rest in
+      (Tail t, rest')
+    | FIX :: rest ->
+      let t, rest' = term rest in
+      (Fix t, rest')
   | LP :: rest ->
       let t, rest' = term rest in
       (match rest' with
