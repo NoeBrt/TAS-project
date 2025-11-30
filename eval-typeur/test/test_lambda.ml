@@ -30,7 +30,7 @@ let show_tokens toks =
       | FIX -> "FIX"
       | NIL -> "NIL"
       | VAR x -> "VAR(" ^ x ^ ")"
-        | INT n -> "INT(" ^ string_of_int n ^ ")")
+      | INT n -> "INT(" ^ string_of_int n ^ ")")
   |> String.concat " "
 
 (* === print_term tests === *)
