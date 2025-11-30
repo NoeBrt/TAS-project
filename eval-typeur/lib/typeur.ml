@@ -1,6 +1,16 @@
 open Ast
 open Printer
 
+
+(* type ptype =
+  | Var of string
+  | Arr of ptype * ptype
+  | Nat
+  | List of ptype
+  | Forall of string * ptype *)
+
+
+
 (* générateur de noms frais de variables de types *)
 let compteur_var : int ref = ref 0
 
@@ -22,16 +32,22 @@ let rec appartient_type (v : string) (t : ptype) : bool =
   match t with
     Var v1 when v1 = v -> true
   | Arr (t1, t2) -> (appartient_type v t1) || (appartient_type v t2)
+  | List t1 -> appartient_type v t1
+  | Forall (v1, t1) when v1 <> v -> appartient_type v t1
+  | Nat -> false
   | _ -> false
-
 (* remplace une variable par un type dans type *)
 let rec substitue_type (t : ptype) (v : string) (t0 : ptype) : ptype =
   match t with
-    Var v1 when v1 = v -> t0
-  | Var v2 -> Var v2
+  | Var x -> if x = v then t0 else Var x
   | Arr (t1, t2) -> Arr (substitue_type t1 v t0, substitue_type t2 v t0)
   | Nat -> Nat
-  | _ -> failwith "Not implemented for this type"
+  | List t1 -> List (substitue_type t1 v t0)
+  | Forall (x, t1) ->
+      if x = v
+      then Forall (x, t1)
+      else Forall (x, substitue_type t1 v t0)
+
 
 (* remplace une variable par un type dans une liste d'équations*)
 let substitue_type_partout (e : equa) (v : string) (t0 : ptype) : equa =
