@@ -115,7 +115,18 @@ let rec unification (e : equa_zip) (but : string) : ptype =
   | (_, (t3, Arr (_,_))::_) -> raise (Echec_unif ("type fleche non-unifiable avec "^(print_type t3)))
     (* types nat des deux cotes : on passe *)
   | (e1, (Nat, Nat)::e2) -> unification (e1, e2) but
-  | _ -> raise (Echec_unif "types non-unifiables")
+  | (e1, (List t1, List t2)::e2) -> unification (e1, (t1, t2)::e2) but
+    (* type liste à gauche pas à droite: echec *)
+  | (_, (List _, t3):: _) -> raise (Echec_unif ("type liste non-unifiable avec "^(print_type t3)))
+    (* types liste à droite pas à gauche: echec *)
+  | (_, (t3, List _):: _) -> raise (Echec_unif ("type liste non-unifiable avec "^(print_type t3)))
+    (* types forall: instanciation *)
+  | (e1, (Forall (v, t1), t2)::e2) ->
+      let nv = nouvelle_var () in
+      unification (e1, (substitue_type t1 v (Var nv), t2)::e2) but
+  | (e1, (t1, Forall (v, t2))::e2) ->
+      let nv = nouvelle_var () in
+      unification (e1, (t1, substitue_type t2 v (Var nv))::e2) but
     (* les autres cas sont impossibles car t est Var, Arr ou Nat et déjà couverts *)
 
 (* enchaine generation d'equation et unification *)
