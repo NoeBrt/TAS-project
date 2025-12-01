@@ -21,11 +21,7 @@ let nouvelle_var () : string = compteur_var := !compteur_var + 1;
 exception VarPasTrouve
 
 (* cherche le type d'une variable dans un environnement *)
-let rec cherche_type (v : string) (e : env) : ptype =
-  match e with
-    [] -> raise VarPasTrouve
-  | (v1, t1)::_ when v1 = v -> t1
-  | (_, _):: q -> (cherche_type v q)
+
 
 (* vérificateur d'occurence de variables *)
 let rec appartient_type (v : string) (t : ptype) : bool =
@@ -48,27 +44,44 @@ let rec substitue_type (t : ptype) (v : string) (t0 : ptype) : ptype =
       then Forall (x, t1)
       else Forall (x, substitue_type t1 v t0)
 
+let rec instancie (t : ptype) : ptype =
+  match t with
+  | Forall (v, t1) ->
+      let nv = nouvelle_var () in
+      instancie (substitue_type t1 v (Var nv))
+  | _ -> t
 
+
+let rec cherche_type (v : string) (e : env) : ptype =
+  match e with
+    [] -> raise VarPasTrouve
+  | (v1, t1)::_ when v1 = v -> instancie t1
+  | (_, _):: q -> (cherche_type v q)
 (* remplace une variable par un type dans une liste d'équations*)
 let substitue_type_partout (e : equa) (v : string) (t0 : ptype) : equa =
   List.map (fun (x, y) -> (substitue_type x v t0, substitue_type y v t0)) e
 
+let rec fv_type (t : ptype) : string list =
+  match t with
+  | Var v -> [v]
+  | Arr (t1, t2) -> fv_type t1 @ fv_type t2
+  | List t1 -> fv_type t1
+  | Forall (v, t1) -> List.filter (fun x -> x <> v) (fv_type t1)
+  | Nat -> []
+
+(* collecte les variables de type libres dans un environnement *)
+let fv_type_env (e : env) : string list =
+  List.concat (List.map (fun (_, t) -> fv_type t) e)
+
+let generalise (t : ptype) (e : env) : ptype =
+  let vars_env = fv_type_env e in
+  let vars_t = fv_type t in
+  let vars_a_quantifier = List.filter (fun v -> not (List.mem v vars_env)) vars_t in
+  List.fold_right (fun v acc -> Forall (v, acc)) vars_a_quantifier t
+
+
 (* genere des equations de typage à partir d'un terme *)
-let rec genere_equa (te : pterm) (ty : ptype) (e : env) : equa =
-  match te with
-    Var v -> let tv : ptype = cherche_type v e in [(ty, tv)]
-  | App (t1, t2) -> let nv : string = nouvelle_var () in
-      let eq1 : equa = genere_equa t1 (Arr (Var nv, ty)) e in
-      let eq2 : equa = genere_equa t2 (Var nv) e in
-      eq1 @ eq2
-  | Abs (x, t) -> let nv1 : string = nouvelle_var ()
-      and nv2 : string = nouvelle_var () in
-      (ty, Arr (Var nv1, Var nv2))::(genere_equa t (Var nv2) ((x, Var nv1)::e))
-  | N _ -> [(ty, Nat)]
-  | Add (t1, t2) -> let eq1 : equa = genere_equa t1 Nat e in
-      let eq2 : equa = genere_equa t2 Nat e in
-      (ty, Nat)::(eq1 @ eq2)
-  | _ -> failwith "Not implemented for this term type"
+
 
 exception Echec_unif of string
 
@@ -129,9 +142,73 @@ let rec unification (e : equa_zip) (but : string) : ptype =
       unification (e1, (t1, substitue_type t2 v (Var nv))::e2) but
     (* les autres cas sont impossibles car t est Var, Arr ou Nat et déjà couverts *)
 
+let rec genere_equa (te : pterm) (ty : ptype) (e : env) : equa =
+  match te with
+    Var v -> let tv : ptype = cherche_type v e in [(ty, tv)]
+  | App (t1, t2) -> let nv : string = nouvelle_var () in
+      let eq1 : equa = genere_equa t1 (Arr (Var nv, ty)) e in
+      let eq2 : equa = genere_equa t2 (Var nv) e in
+      eq1 @ eq2
+  | Abs (x, t) ->
+      let nv1 : string = nouvelle_var ()
+      and nv2 : string = nouvelle_var () in
+      (ty, Arr (Var nv1, Var nv2))::(genere_equa t (Var nv2) ((x, Var nv1)::e))
+  | N _ -> [(ty, Nat)]
+  | Add (t1, t2) -> let eq1 : equa = genere_equa t1 Nat e in
+      let eq2 : equa = genere_equa t2 Nat e in
+      (ty, Nat)::(eq1 @ eq2)
+  | Sub (t1, t2) -> let eq1 : equa = genere_equa t1 Nat e in
+      let eq2 : equa = genere_equa t2 Nat e in
+      (ty, Nat)::(eq1 @ eq2)
+  | Cons (t1, t2) ->
+      let nv : string = nouvelle_var () in
+      let eq1 : equa = genere_equa t1 (Var nv) e in
+      let eq2 : equa = genere_equa t2 (List (Var nv)) e in
+      (ty, List (Var nv))::(eq1 @ eq2)
+  | Head t1 ->
+      let nv : string = nouvelle_var () in
+      let eq1 : equa = genere_equa t1 (List (Var nv)) e in
+      (ty, Var nv)::eq1
+  | Tail t1 ->
+      let nv : string = nouvelle_var () in
+      let eq1 : equa = genere_equa t1 (List (Var nv)) e in
+      (ty, List (Var nv))::eq1
+  | IfZero (t1, t2, t3) ->
+      let eq1 : equa = genere_equa t1 Nat e in
+      let eq2 : equa = genere_equa t2 ty e in
+      let eq3 : equa = genere_equa t3 ty e in
+      eq1 @ eq2 @ eq3
+  | IfEmpty (t1, t2, t3) ->
+      let nv : string = nouvelle_var () in
+      let eq1 : equa = genere_equa t1 (List (Var nv)) e in
+      let eq2 : equa = genere_equa t2 ty e in
+      let eq3 : equa = genere_equa t3 ty e in
+      eq1 @ eq2 @ eq3
+  | Fix t1 ->
+      let nv1 : string = nouvelle_var ()
+      and nv2 : string = nouvelle_var () in
+      let eq1 : equa = genere_equa t1 (Arr (Var nv1, Var nv2)) e in
+      (ty, Arr (Var nv1, Var nv2))::eq1
+  | Nil -> (ty, List (Var (nouvelle_var ())))::[]
+  | Let (x, t1, t2) ->
+      (* 1. on génère des équations pour t1 avec un but frais *)
+      let nv1 : string = nouvelle_var () in
+      let eq1 : equa = genere_equa t1 (Var nv1) e in
+      (* 2. on unifie pour obtenir le type de t1 *)
+      let ty1 : ptype = unification ([], eq1) nv1 in
+      (* 3. on généralise éventuellement par rapport à l'environnement *)
+      let ty1_gen : ptype = generalise ty1 e in
+      (* 4. on génère les équations pour t2 dans l'env étendu *)
+      genere_equa t2 ty ((x, ty1_gen)::e)
+
+
+let inference_env (t : pterm) (env : env) : ptype =
+  let e : equa_zip = ([], genere_equa t (Var "but") env) in
+  unification e "but"
 (* enchaine generation d'equation et unification *)
 let inference (t : pterm) : string =
-  let e : equa_zip = ([], genere_equa t (Var "but") []) in
-  try (let res = unification e "but" in
-       (print_term t)^" ***TYPABLE*** avec le type "^(print_type res))
-  with Echec_unif bla -> (print_term t)^" ***PAS TYPABLE*** : "^bla
+  try
+    let res = inference_env t [] in
+    (print_term t)^" ***TYPABLE*** avec le type "^(print_type res)
+  with
+  | Echec_unif bla -> (print_term t)^" ***PAS TYPABLE*** : "^bla
