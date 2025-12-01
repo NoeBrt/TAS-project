@@ -33,6 +33,7 @@ let show_tokens toks =
       | REF -> "REF"
       | DEREF -> "DEREF"
       | ASSIGN -> "ASSIGN"
+      | SEMISEMI -> "SEMISEMI"
       | VAR x -> "VAR(" ^ x ^ ")"
       | INT n -> "INT(" ^ string_of_int n ^ ")")
   |> String.concat " "
@@ -358,6 +359,45 @@ let test_typeur_assign () =
   check bool "assign type" true (contains_substring res "Unit")
 
 
+(* === Alpha conversion with set tests === *)
+let test_alpha_convert_with_set_no_collision () =
+  let t = Lambda.Ast.Abs ("x", (Lambda.Ast.Var "x" : Lambda.Ast.pterm)) in
+  let res = alpha_convert_with_set t StringSet.empty in
+  check string "no collision" "(λx.x)" (print_term res)
+
+let test_alpha_convert_with_set_collision () =
+  let t = Lambda.Ast.Abs ("x", (Lambda.Ast.Var "x" : Lambda.Ast.pterm)) in
+  let set = StringSet.singleton "x" in
+  let res = alpha_convert_with_set t set in
+  match res with
+  | Lambda.Ast.Abs (new_x, Lambda.Ast.Var new_v) ->
+      check bool "var renamed" true (new_x <> "x");
+      check string "body var matches binder" new_x new_v
+  | _ -> fail "Expected Abs"
+
+let test_alpha_convert_with_set_nested_shadowing () =
+  let t = Lambda.Ast.Abs ("x", Lambda.Ast.Abs ("x", (Lambda.Ast.Var "x" : Lambda.Ast.pterm))) in
+  let res = alpha_convert_with_set t StringSet.empty in
+  match res with
+  | Lambda.Ast.Abs (x1, Lambda.Ast.Abs (x2, Lambda.Ast.Var x3)) ->
+      check string "outer x kept" "x" x1;
+      check bool "inner x renamed" true (x2 <> "x");
+      check string "inner body matches inner binder" x2 x3
+  | _ -> fail "Expected Abs(Abs)"
+
+let test_alpha_convert_with_set_performance () =
+  let t0 = Sys.time () in
+  let rec make_deep_term n : Lambda.Ast.pterm =
+    if n = 0 then Lambda.Ast.Var "x"
+    else Lambda.Ast.Abs ("x", make_deep_term (n - 1))
+  in
+  let depth = 500 in
+  let t = make_deep_term depth in
+  let _ = alpha_convert_with_set t StringSet.empty in
+  let t1 = Sys.time () in
+  Printf.printf "Alpha convert depth %d took %f seconds\n" depth (t1 -. t0);
+  check bool "performance reasonable" true ((t1 -. t0) < 5.0)
+
 (* === test list === *)
 let () =
   Alcotest.run "Lambda tests"
@@ -435,5 +475,12 @@ let () =
           test_case "typeur ref" `Quick test_typeur_ref;
           test_case "typeur deref" `Quick test_typeur_deref;
           test_case "typeur assign" `Quick test_typeur_assign;
+        ] );
+      ( "alpha_convert_with_set",
+        [
+          test_case "no collision" `Quick test_alpha_convert_with_set_no_collision;
+          test_case "collision" `Quick test_alpha_convert_with_set_collision;
+          test_case "nested shadowing" `Quick test_alpha_convert_with_set_nested_shadowing;
+          test_case "performance" `Quick test_alpha_convert_with_set_performance;
         ] );
     ]

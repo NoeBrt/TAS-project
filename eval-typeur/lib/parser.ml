@@ -24,6 +24,7 @@ type tok =
   | REF
   | DEREF
   | ASSIGN
+  | SEMISEMI
   | VAR of string
   | INT of int
 
@@ -57,6 +58,13 @@ let lex s =
     if i = String.length s then flush ()
     else match s.[i] with
     | ' ' | '\t' | '\n' -> flush (); loop (i+1)
+    | '#' ->
+        flush ();
+        let rec skip_comment i =
+          if i < String.length s && s.[i] <> '\n' then skip_comment (i+1)
+          else i
+        in
+        loop (skip_comment i)
     | '(' ->
         flush ();
         if i + 1 < String.length s && s.[i+1] = ')' then (push UNIT; loop (i+2))
@@ -67,6 +75,8 @@ let lex s =
     | '-' -> flush (); push MINUS; loop (i+1)
     | '=' -> flush (); push EQUAL; loop (i+1)
     | '!' -> flush (); push DEREF; loop (i+1)
+    | ';' when i + 1 < String.length s && s.[i + 1] = ';' ->
+        flush (); push SEMISEMI; loop (i + 2)
     | ':' when i + 1 < String.length s && s.[i + 1] = '=' ->
         flush (); push ASSIGN; loop (i + 2)
     | '\\' -> flush (); push LAMBDA; loop (i + 1)
@@ -75,10 +85,15 @@ let lex s =
     | '[' when i + 1 < String.length s && s.[i + 1] = ']' ->
         flush (); push NIL; loop (i + 2)
     | c when is_digit c ->
-        let j = ref i in
-        while !j < String.length s && is_digit s.[!j] do incr j done;
-        push (INT (int_of_string (String.sub s i (!j - i))));
-        loop !j
+        if Buffer.length buf > 0 then (
+          Buffer.add_char buf c;
+          loop (i+1)
+        ) else (
+          let j = ref i in
+          while !j < String.length s && is_digit s.[!j] do incr j done;
+          push (INT (int_of_string (String.sub s i (!j - i))));
+          loop !j
+        )
     | c -> Buffer.add_char buf c; loop (i+1)
   in
   loop 0; List.rev !toks
@@ -195,3 +210,16 @@ let parsePTERM (s : string) : pterm =
   match rest with
   | [] -> t
   | _ -> raise (Parse_err "trailing tokens")
+
+let rec terms toks =
+  match toks with
+  | [] -> []
+  | _ ->
+    let t, rest = term toks in
+    match rest with
+    | SEMISEMI :: rest' -> t :: terms rest'
+    | [] -> [t]
+    | _ -> raise (Parse_err "expected ;; or EOF")
+
+let parse_prog (s : string) : pterm list =
+  terms (lex s)
