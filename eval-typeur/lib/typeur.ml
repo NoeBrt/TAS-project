@@ -31,6 +31,8 @@ let rec appartient_type (v : string) (t : ptype) : bool =
   | List t1 -> appartient_type v t1
   | Forall (v1, t1) when v1 <> v -> appartient_type v t1
   | Nat -> false
+  | Unit -> false
+  | Ref t1 -> appartient_type v t1
   | _ -> false
 (* remplace une variable par un type dans type *)
 let rec substitue_type (t : ptype) (v : string) (t0 : ptype) : ptype =
@@ -38,6 +40,8 @@ let rec substitue_type (t : ptype) (v : string) (t0 : ptype) : ptype =
   | Var x -> if x = v then t0 else Var x
   | Arr (t1, t2) -> Arr (substitue_type t1 v t0, substitue_type t2 v t0)
   | Nat -> Nat
+  | Unit -> Unit
+  | Ref t1 -> Ref (substitue_type t1 v t0)
   | List t1 -> List (substitue_type t1 v t0)
   | Forall (x, t1) ->
       if x = v
@@ -68,6 +72,8 @@ let rec fv_type (t : ptype) : string list =
   | List t1 -> fv_type t1
   | Forall (v, t1) -> List.filter (fun x -> x <> v) (fv_type t1)
   | Nat -> []
+  | Unit -> []
+  | Ref t1 -> fv_type t1
 
 (* collecte les variables de type libres dans un environnement *)
 let fv_type_env (e : env) : string list =
@@ -140,6 +146,11 @@ let rec unification (e : equa_zip) (but : string) : ptype =
   | (e1, (t1, Forall (v, t2))::e2) ->
       let nv = nouvelle_var () in
       unification (e1, (t1, substitue_type t2 v (Var nv))::e2) but
+  | (e1, (Unit, Unit)::e2) -> unification (e1, e2) but
+  | (e1, (Ref t1, Ref t2)::e2) -> unification (e1, (t1, t2)::e2) but
+  | (_, (Ref _, t3)::_) -> raise (Echec_unif ("type ref non-unifiable avec "^(print_type t3)))
+  | (_, (t3, Ref _)::_) -> raise (Echec_unif ("type ref non-unifiable avec "^(print_type t3)))
+  | _ -> raise (Echec_unif "types non-unifiables")
     (* les autres cas sont impossibles car t est Var, Arr ou Nat et déjà couverts *)
 
 let rec genere_equa (te : pterm) (ty : ptype) (e : env) : equa =
@@ -200,6 +211,21 @@ let rec genere_equa (te : pterm) (ty : ptype) (e : env) : equa =
       let ty1_gen : ptype = generalise ty1 e in
       (* 4. on génère les équations pour t2 dans l'env étendu *)
       genere_equa t2 ty ((x, ty1_gen)::e)
+  | Unit -> [(ty, Unit)]
+  | Loc _ -> raise (Echec_unif "Loc in source code")
+  | Ref t ->
+      let nv = nouvelle_var () in
+      let eq = genere_equa t (Var nv) e in
+      (ty, Ref (Var nv))::eq
+  | Deref t ->
+      let nv = nouvelle_var () in
+      let eq = genere_equa t (Ref (Var nv)) e in
+      (ty, Var nv)::eq
+  | Assign (t1, t2) ->
+      let nv = nouvelle_var () in
+      let eq1 = genere_equa t1 (Ref (Var nv)) e in
+      let eq2 = genere_equa t2 (Var nv) e in
+      (ty, Unit)::(eq1 @ eq2)
 
 
 let inference_env (t : pterm) (env : env) : ptype =
