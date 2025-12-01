@@ -1,0 +1,25 @@
+{
+  "name": "lambda-language",
+  "displayName": "Lambda Language",
+  "description": "Syntax highlighting for .lambda files",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.70.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "contributes": {
+    "languages": [{
+      "id": "lambda",
+      "aliases": ["Lambda", "lambda"],
+      "extensions": [".lambda"],
+      "configuration": "./language-configuration.json"
+    }],
+    "grammars": [{
+      "language": "lambda",
+      "scopeName": "source.lambda",
+      "path": "./syntaxes/lambda.tmLanguage.json"
+    }]
+  }
+}
