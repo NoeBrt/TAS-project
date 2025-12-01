@@ -20,6 +20,10 @@ type tok =
   | TAIL
   | FIX
   | NIL
+  | UNIT
+  | REF
+  | DEREF
+  | ASSIGN
   | VAR of string
   | INT of int
 
@@ -38,6 +42,7 @@ let lex s =
     | "head" -> HEAD
     | "tail" -> TAIL
     | "fix" -> FIX
+    | "ref" -> REF
     | _ -> VAR str
   in
   let flush () =
@@ -52,12 +57,18 @@ let lex s =
     if i = String.length s then flush ()
     else match s.[i] with
     | ' ' | '\t' | '\n' -> flush (); loop (i+1)
-    | '(' -> flush (); push LP; loop (i+1)
+    | '(' ->
+        flush ();
+        if i + 1 < String.length s && s.[i+1] = ')' then (push UNIT; loop (i+2))
+        else (push LP; loop (i+1))
     | ')' -> flush (); push RP; loop (i+1)
     | '.' -> flush (); push DOT; loop (i+1)
     | '+' -> flush (); push PLUS; loop (i+1)
     | '-' -> flush (); push MINUS; loop (i+1)
     | '=' -> flush (); push EQUAL; loop (i+1)
+    | '!' -> flush (); push DEREF; loop (i+1)
+    | ':' when i + 1 < String.length s && s.[i + 1] = '=' ->
+        flush (); push ASSIGN; loop (i + 2)
     | '\\' -> flush (); push LAMBDA; loop (i + 1)
     | ':' when i + 1 < String.length s && s.[i + 1] = ':' ->
         flush (); push CONS; loop (i + 2)
@@ -79,36 +90,44 @@ let rec term toks =
   | LET :: VAR x :: EQUAL :: rest ->
       let t1, rest1 = term rest in
       (match rest1 with
-       | IN :: rest2 ->
-           let t2, rest3 = term rest2 in
-           (Let (x, t1, t2), rest3)
-       | _ -> raise (Parse_err "expected 'in' after let binding"))
+        | IN :: rest2 ->
+          let t2, rest3 = term rest2 in
+          (Let (x, t1, t2), rest3)
+          | _ -> raise (Parse_err "expected 'in' after let binding"))
   | IF :: ZERO :: rest ->
       let cond, rest1 = term rest in
       (match rest1 with
-       | THEN :: rest2 ->
-           let t_then, rest3 = term rest2 in
-           (match rest3 with
+        | THEN :: rest2 ->
+          let t_then, rest3 = term rest2 in
+          (match rest3 with
             | ELSE :: rest4 ->
                 let t_else, rest5 = term rest4 in
                 (IfZero (cond, t_then, t_else), rest5)
             | _ -> raise (Parse_err "expected 'else'"))
-       | _ -> raise (Parse_err "expected 'then'"))
+      | _ -> raise (Parse_err "expected 'then'"))
     | IF :: EMPTY :: rest ->
       let cond, rest1 = term rest in
       (match rest1 with
-       | THEN :: rest2 ->
-           let t_then, rest3 = term rest2 in
-           (match rest3 with
+        | THEN :: rest2 ->
+          let t_then, rest3 = term rest2 in
+          (match rest3 with
             | ELSE :: rest4 ->
                 let t_else, rest5 = term rest4 in
                 (IfEmpty (cond, t_then, t_else), rest5)
             | _ -> raise (Parse_err "expected 'else'"))
-       | _ -> raise (Parse_err "expected 'then'"))
+      | _ -> raise (Parse_err "expected 'then'"))
   | LAMBDA :: VAR x :: DOT :: rest ->
       let t, rest' = term rest in
       (Abs (x, t), rest')
-  | _ -> cons toks
+  | _ -> assign toks
+
+and assign toks =
+  let t1, rest1 = cons toks in
+  match rest1 with
+  | ASSIGN :: rest ->
+      let t2, rest' = assign rest in
+      (Assign (t1, t2), rest')
+  | _ -> t1, rest1
 
 and cons toks =
   let t1, rest1 = sum toks in
@@ -136,7 +155,7 @@ and app toks =
   let t1, rest1 = atom toks in
   let rec aux acc toks =
     match toks with
-    | (VAR _ | INT _ | LP | NIL | HEAD | TAIL | FIX) :: _ as rest ->
+    | (VAR _ | INT _ | LP | NIL | HEAD | TAIL | FIX | REF | DEREF | UNIT) :: _ as rest ->
         let t2, rest' = atom rest in
         aux (App (acc, t2)) rest'
     | _ -> acc, toks
@@ -147,6 +166,13 @@ and atom = function
   | VAR x :: rest -> Var x, rest
   | INT n :: rest -> N n, rest
   | NIL :: rest -> Nil, rest
+  | UNIT :: rest -> Unit, rest
+  | REF :: rest ->
+      let t, rest' = atom rest in
+      (Ref t, rest')
+  | DEREF :: rest ->
+      let t, rest' = atom rest in
+      (Deref t, rest')
   | HEAD :: rest ->
       let t, rest' = atom rest in
       (Head t, rest')
@@ -159,8 +185,8 @@ and atom = function
   | LP :: rest ->
       let t, rest' = term rest in
       (match rest' with
-       | RP :: r -> t, r
-       | _ -> raise (Parse_err "missing )"))
+      | RP :: r -> t, r
+      | _ -> raise (Parse_err "missing )"))
   | _ -> raise (Parse_err "bad token")
 
 
