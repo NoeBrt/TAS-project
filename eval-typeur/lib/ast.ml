@@ -12,13 +12,19 @@ type pterm =  Var of string
               | Fix of pterm
               | Nil
               | Let of string * pterm * pterm
-
+              | Unit
+              | Loc of int
+              | Ref of pterm
+              | Deref of pterm
+              | Assign of pterm * pterm
 type ptype =
   | Var of string
   | Arr of ptype * ptype
   | Nat
   | List of ptype
   | Forall of string * ptype
+  | Unit
+  | Ref of ptype
 
 
 
