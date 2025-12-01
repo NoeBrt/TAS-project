@@ -29,6 +29,10 @@ let show_tokens toks =
       | TAIL -> "TAIL"
       | FIX -> "FIX"
       | NIL -> "NIL"
+      | UNIT -> "UNIT"
+      | REF -> "REF"
+      | DEREF -> "DEREF"
+      | ASSIGN -> "ASSIGN"
       | VAR x -> "VAR(" ^ x ^ ")"
       | INT n -> "INT(" ^ string_of_int n ^ ")")
   |> String.concat " "
@@ -288,6 +292,72 @@ let test_typeur_ex_nat3 () =
   check string "ex_nat3 exact"
     "((λx.(x+x)) (λx.x)) ***PAS TYPABLE*** : type fleche non-unifiable avec Nat" res
 
+let test_typeur_let_id () =
+  let t = Let ("id", Abs ("x", Var "x"), Var "id") in
+  let res = inference t in
+  check bool "let_id typable" true (contains_substring res "***TYPABLE***");
+  check bool "let_id arrow" true (contains_substring res "->")
+
+let test_typeur_let_poly_app () =
+  let t = Let ("id", Abs ("x", Var "x"), App (Var "id", Var "id")) in
+  let res = inference t in
+  check bool "let_poly_app typable" true (contains_substring res "***TYPABLE***");
+  check bool "let_poly_app arrow" true (contains_substring res "->")
+
+let test_typeur_let_poly_reuse () =
+  let t = Let ("id", Abs ("x", Var "x"),
+            Let ("ignore", App (Var "id", N 0),
+              App (Var "id", Var "id"))) in
+  let res = inference t in
+  check bool "let_poly_reuse typable" true (contains_substring res "***TYPABLE***")
+
+let test_typeur_fail_mono () =
+  let t = Abs ("f", App (Var "f", Var "f")) in
+  let res = inference t in
+  check bool "fail_mono not typable" true (contains_substring res "***PAS TYPABLE***")
+
+(* === Imperative tests === *)
+let test_ref_creation () =
+  let t = parsePTERM "ref 1" in
+  let res = eval t in
+  match res with
+  | Loc _ -> check bool "ref returns loc" true true
+  | _ -> check bool "ref returns loc" false true
+
+let test_deref () =
+  let t = parsePTERM "!(ref 1)" in
+  let res = eval t in
+  check string "deref" "1" (print_term res)
+
+let test_assign () =
+  let t = parsePTERM "let r = ref 1 in r := 2" in
+  let res = eval t in
+  check string "assign returns unit" "()" (print_term res)
+
+let test_assign_effect () =
+  let t = parsePTERM "let r = ref 1 in let _ = (r := 2) in !r" in
+  let res = eval t in
+  check string "assign effect" "2" (print_term res)
+
+let test_typeur_ref () =
+  let t = parsePTERM "ref 1" in
+  let res = inference t in
+  check bool "ref typable" true (contains_substring res "***TYPABLE***");
+  check bool "ref type" true (contains_substring res "Ref Nat")
+
+let test_typeur_deref () =
+  let t = parsePTERM "!(ref 1)" in
+  let res = inference t in
+  check bool "deref typable" true (contains_substring res "***TYPABLE***");
+  check bool "deref type" true (contains_substring res "Nat")
+
+let test_typeur_assign () =
+  let t = parsePTERM "let r = ref 1 in r := 2" in
+  let res = inference t in
+  check bool "assign typable" true (contains_substring res "***TYPABLE***");
+  check bool "assign type" true (contains_substring res "Unit")
+
+
 (* === test list === *)
 let () =
   Alcotest.run "Lambda tests"
@@ -354,5 +424,16 @@ let () =
           test_case "ex_nat1" `Quick test_typeur_ex_nat1;
           test_case "ex_nat2" `Quick test_typeur_ex_nat2;
           test_case "ex_nat3" `Quick test_typeur_ex_nat3;
+          test_case "let_id" `Quick test_typeur_let_id;
+          test_case "let_poly_app" `Quick test_typeur_let_poly_app;
+          test_case "let_poly_reuse" `Quick test_typeur_let_poly_reuse;
+          test_case "fail_mono" `Quick test_typeur_fail_mono;
+          test_case "ref creation" `Quick test_ref_creation;
+          test_case "deref" `Quick test_deref;
+          test_case "assign" `Quick test_assign;
+          test_case "assign effect" `Quick test_assign_effect;
+          test_case "typeur ref" `Quick test_typeur_ref;
+          test_case "typeur deref" `Quick test_typeur_deref;
+          test_case "typeur assign" `Quick test_typeur_assign;
         ] );
     ]
