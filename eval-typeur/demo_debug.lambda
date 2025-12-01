@@ -1,0 +1,16 @@
+# ==========================================
+#      DEMO OF ALL LANGUAGE FEATURES
+# ==========================================
+
+# 1. Lambda Calculus (Abs, App, Var)
+(\x. x) 42 ;;
+
+# 2. Arithmetic (N, Add, Sub)
+(10 + 5) - 3 ;;
+
+# 3. Let Bindings
+let x = 10 in x + x ;;
+
+# 4. Conditionals (IfZero)
+let n = 0 in
+if zero n then 100 else 200 ;;
