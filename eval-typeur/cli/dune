@@ -1,0 +1,4 @@
+(executable
+ (public_name lambda)
+ (name cli)
+ (libraries eval-typeur.lambda))
