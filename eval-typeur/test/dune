@@ -2,3 +2,8 @@
  (name test_lambda)
  (modules test_lambda)
  (libraries lambda alcotest))
+
+(executable
+ (name benchmark_alpha)
+ (modules benchmark_alpha)
+ (libraries lambda unix))
