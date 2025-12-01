@@ -1,22 +1,24 @@
-type pterm =  Var of string
-              | Abs of string * pterm
-              | App of pterm * pterm
-              | N of int
-              | Add of pterm * pterm
-              | Sub of pterm * pterm
-              | Cons of pterm * pterm
-              | Head of pterm
-              | Tail of pterm
-              | IfZero of pterm * pterm * pterm
-              | IfEmpty of pterm * pterm * pterm
-              | Fix of pterm
-              | Nil
-              | Let of string * pterm * pterm
-              | Unit
-              | Loc of int
-              | Ref of pterm
-              | Deref of pterm
-              | Assign of pterm * pterm
+type pterm =
+  | Var of string
+  | Abs of string * pterm
+  | App of pterm * pterm
+  | N of int
+  | Add of pterm * pterm
+  | Sub of pterm * pterm
+  | Cons of pterm * pterm
+  | Head of pterm
+  | Tail of pterm
+  | IfZero of pterm * pterm * pterm
+  | IfEmpty of pterm * pterm * pterm
+  | Fix of pterm
+  | Nil
+  | Let of string * pterm * pterm
+  | Unit
+  | Loc of int
+  | Ref of pterm
+  | Deref of pterm
+  | Assign of pterm * pterm
+
 type ptype =
   | Var of string
   | Arr of ptype * ptype
@@ -25,9 +27,6 @@ type ptype =
   | Forall of string * ptype
   | Unit
   | Ref of ptype
-
-
-
 
 type env = (string * ptype) list
 
