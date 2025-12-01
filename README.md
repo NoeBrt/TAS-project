@@ -58,11 +58,16 @@ dune exec main
 ```bash
 eval-typeur
 ├── bin
-│   └── main.ml
+│   ├── dune
+│   └── main.ml                  # point d'entrée (CLI)
 ├── lib
-│   ├── ast.ml # definition des types
-│   ├── parser.ml # lexer - parser
-│   └── printer.ml # pretty printer
+│   ├── dune
+│   ├── ast.ml                   # définitions des termes et types
+│   ├── parser.ml                # analyseur lexical + syntaxique
+│   ├── printer.ml               # pretty-printer pour termes et types
+│   ├── evaluation.ml            # sémantique (évaluateur)
+│   └── typeur.ml                # moteur d’inférence de types (HM polymorphe)
 └── test
-    └── test_lambda.ml
+    ├── dune
+    └── test_lambda.ml           # tests unitaires pour parser/éval/typeur
 ```
