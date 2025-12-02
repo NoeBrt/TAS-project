@@ -9,8 +9,10 @@ let term = parsePTERM "\\x.x" ;;
 print_endline (print_term term) ;;
 
 let term2 = parsePTERM "(\\f.\\x.(f(f x)))x" ;;
+print_endline (print_term (alpha_convert_with_set term2 (fv term2))) ;;
 
 print_endline (print_term (alpha_convert term2)) ;;
+
 
 let term3 = parsePTERM "10 + (\\x.(x+x))10" ;;
 
